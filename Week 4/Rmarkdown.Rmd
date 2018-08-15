@@ -1,0 +1,115 @@
+---
+title: "Reproducible Research Course Project 2"
+author: "Javier Ng"
+date: "15th August 2018"
+output: 
+  word_document:
+      keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Sypnosis
+
+This paper seeks to address the following questions based on the U.S. National Oceanic and Atmospheric Administration’s (NOAA) storm database covering the period between 1950 and end in November 2011:
+
+* Across the United States, which types of events (as indicated in the 𝙴𝚅𝚃𝚈𝙿𝙴 variable) are most harmful with respect to population health?
+Across the United States, which types of events have the greatest economic consequences?
+
+* Impacts on population health are represented within the data as injuries and fatalities and the are discussed separately below.
+
+The economic impact is represented by the dual impacts of Crop and Property damage - these will be considered together to give an overall picture of economic impact.
+
+## Loading of Dataset & Required Libraries
+
+```{R message = F}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+FileDownloadLocation = "https://d396qusza40orc.cloudfront.net/"
+File = "repdata%2Fdata%2FStormData.csv.bz2"
+
+if(all(File %in% dir()) == FALSE) { 
+        
+        download.file(paste0(FileDownloadLocation, File), 
+                       File, method = "curl")
+} 
+## set the number of rows to read in equal to the number of obs found in
+## exploratory analysis to improve data load performance
+storm_data <- read.table(File,  header = TRUE, sep = ",", nrows = 902298 )
+dim(storm_data)
+```
+Relevant columns are selected
+```{R}
+storm_data <- storm_data[ , c(8, 23:28)] 
+rm(storm_data_file)
+head(storm_data)
+```
+```{R}
+total_injuries <- aggregate(INJURIES~EVTYPE, storm_data, sum)
+total_injuries <- arrange(total_injuries, desc(INJURIES))
+total_injuries <- total_injuries[1:20, ]
+total_injuries
+total_fatalities <- aggregate(FATALITIES~EVTYPE, storm_data, sum)
+total_fatalities <- arrange(total_fatalities, desc(FATALITIES))
+total_fatalities <- total_fatalities[1:20, ]
+total_fatalities
+totals<- merge(total_fatalities, total_injuries, by.x = "EVTYPE", by.y = "EVTYPE")
+totals<-arrange(totals,desc(FATALITIES+INJURIES))
+names_events <- totals$EVTYPE
+```
+Data is now cleaned and ready for graph plotting.
+
+## Results
+
+### Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+Fatalities and Injuries are Merged
+
+```{R}
+barplot(t(totals[,-1]), names.arg = names_events, ylim = c(0,95000), beside = T, cex.names = 0.8, las=2, col = c("red", "yellow"), main="Top Disaster Casualties")
+legend("topright",c("Fatalities","Injuries"),fill=c("red","yellow"),bty = "n")
+```
+Based on the above histogram, it can be observed that *Tornado* and *Heat* had caused the most number of fatalities and *Tornado* had caused most injuries in the United States between the period of 1995 to 2011.
+
+## Across the United States, which types of events have the greatest economic consequences?
+
+### Data Processing
+We need to convert property and cropt damage into numbers where H=10^2, K=10^3, M =10^6, and B=10^9. For this, we create two new variables: PROPDAMAGE, CROPDAMAGE
+
+```{R}
+storm_data$PROPDAMAGE = 0
+storm_data[storm_data$PROPDMGEXP == "H", ]$PROPDAMAGE = storm_data[storm_data$PROPDMGEXP == "H", ]$PROPDMG * 10^2
+storm_data[storm_data$PROPDMGEXP == "K", ]$PROPDAMAGE = storm_data[storm_data$PROPDMGEXP == "K", ]$PROPDMG * 10^3
+storm_data[storm_data$PROPDMGEXP == "M", ]$PROPDAMAGE = storm_data[storm_data$PROPDMGEXP == "M", ]$PROPDMG * 10^6
+storm_data[storm_data$PROPDMGEXP == "B", ]$PROPDAMAGE = storm_data[storm_data$PROPDMGEXP == "B", ]$PROPDMG * 10^9
+
+storm_data$CROPDAMAGE = 0
+storm_data[storm_data$CROPDMGEXP == "H", ]$CROPDAMAGE = storm_data[storm_data$CROPDMGEXP == "H", ]$CROPDMG * 10^2
+storm_data[storm_data$CROPDMGEXP == "K", ]$CROPDAMAGE = storm_data[storm_data$CROPDMGEXP == "K", ]$CROPDMG * 10^3
+storm_data[storm_data$CROPDMGEXP == "M", ]$CROPDAMAGE = storm_data[storm_data$CROPDMGEXP == "M", ]$CROPDMG * 10^6
+storm_data[storm_data$CROPDMGEXP == "B", ]$CROPDAMAGE = storm_data[storm_data$CROPDMGEXP == "B", ]$CROPDMG * 10^9
+```
+
+Aggregate property and crop damage into one variable. Arrange and select the top 20.
+
+```{R}
+economic_damage <- aggregate(PROPDAMAGE + CROPDAMAGE ~ EVTYPE, storm_data, sum)
+names(economic_damage) = c("EVENT_TYPE", "TOTAL_DAMAGE")
+economic_damage <- arrange(economic_damage, desc(TOTAL_DAMAGE))
+economic_damage <- economic_damage[1:20, ]
+economic_damage$TOTAL_DAMAGE <- economic_damage$TOTAL_DAMAGE/10^9
+economic_damage$EVENT_TYPE <- factor(economic_damage$EVENT_TYPE, levels = economic_damage$EVENT_TYPE)
+head(economic_damage)
+```
+
+### Results
+
+Graph showing cost of damages from severe weather events
+
+```{R}
+with(economic_damage, barplot(TOTAL_DAMAGE, names.arg = EVENT_TYPE, beside = T, cex.names = 0.8, las=2, col = "gold", main = "Total Property and Crop Damage by Top 20 Event Types", ylab = "Total Damage in USD (10^9)"))
+```
